@@ -4,9 +4,6 @@ package com.natpryce.cons
  * A singly-linked list
  */
 sealed class ConsList<out T> : Iterable<T> {
-    abstract val head: T?
-    abstract val tail: ConsList<T>
-    
     override fun iterator(): Iterator<T> =
         ConsListIterator(this)
     
@@ -14,13 +11,8 @@ sealed class ConsList<out T> : Iterable<T> {
         joinToString(prefix = "[", separator = ", ", postfix = "]")
 }
 
-object Empty : ConsList<Nothing>() {
-    override val head get() = null
-    override val tail get() = this
-}
-
-data class Cons<out T>(override val head: T, override val tail: ConsList<T>) :
-    ConsList<T>()
+object Empty : ConsList<Nothing>()
+data class Cons<out T>(val head: T, val tail: ConsList<T>) : ConsList<T>()
 
 fun ConsList<*>.isEmpty() = this == Empty
 fun ConsList<*>.isNotEmpty() = !isEmpty()
@@ -46,6 +38,12 @@ private class ConsListIterator<out T>(private var current: ConsList<T>) : Iterat
         current.isNotEmpty()
     
     override fun next() =
-        (current.head ?: throw NoSuchElementException())
-            .also { current = current.tail }
+        current.let {
+            if (it is Cons<T>) {
+                current = it.tail
+                it.head
+            } else {
+                throw NoSuchElementException()
+            }
+        }
 }
