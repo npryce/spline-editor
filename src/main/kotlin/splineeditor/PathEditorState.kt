@@ -133,12 +133,3 @@ fun PathEditorState.removeControlPoint(pathIndex: Int, controlPointIndex: Int) =
         paths.set(pathIndex, paths[pathIndex].withoutControlPoint(controlPointIndex))
     }
 
-fun PathEditorState.afterSavingFile(file: File): PathEditorState {
-    file.format().save(file, history.current)
-    
-    return copy(
-        lastSavedState = history.current,
-        file = file,
-        workspace = workspace.withRecentFile(file)
-    )
-}

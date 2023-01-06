@@ -3,7 +3,6 @@ package splineeditor.io
 import androidx.compose.ui.window.FrameWindowScope
 import com.natpryce.editing.UndoRedoStack
 import splineeditor.PathEditorState
-import splineeditor.afterSavingFile
 import splineeditor.io.FileOperation.LOAD
 import splineeditor.io.FileOperation.SAVE
 import splineeditor.withNoSelection
@@ -11,6 +10,17 @@ import splineeditor.withRecentFile
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileFilter
+
+val fileFormats = listOf(
+    Pico8CartMapSectionFormat.withBackup(".bak"),
+    Pico8MapFormat,
+    LuaSourceFormat
+)
+
+fun File.format() =
+    fileFormats.find { format -> name.endsWith(format.extension) }
+        ?: error("do not recognise extension of file $this")
+
 
 fun PathEditorState.loadFile(file: File): PathEditorState {
     val loaded = file.format().load(file)
@@ -23,19 +33,23 @@ fun PathEditorState.loadFile(file: File): PathEditorState {
     )
 }
 
-val fileFormats = listOf(
-    Pico8CartMapSectionFormat.withBackup(".bak"),
-    Pico8MapFormat,
-    LuaSourceFormat
-)
+fun PathEditorState.saveToFile(file: File): PathEditorState {
+    file.format().save(file, history.current)
+    
+    return copy(
+        lastSavedState = history.current,
+        file = file,
+        workspace = workspace.withRecentFile(file)
+    )
+}
+
 
 fun FrameWindowScope.load(currentState: PathEditorState): PathEditorState {
     val file = chooseFile(LOAD, currentState.file)
     
-    if (file != null) {
-        return currentState.loadFile(file)
-    } else {
-        return currentState
+    when (file) {
+        null -> return currentState
+        else -> return currentState.loadFile(file)
     }
 }
 
@@ -49,13 +63,9 @@ fun FrameWindowScope.save(
     
     return when (file) {
         null -> currentState
-        else -> currentState.afterSavingFile(file)
+        else -> currentState.saveToFile(file)
     }
 }
-
-fun File.format() =
-    fileFormats.find { format -> name.endsWith(format.extension) }
-        ?: error("do not recognise extension of file $this")
 
 
 private enum class FileOperation { LOAD, SAVE }
