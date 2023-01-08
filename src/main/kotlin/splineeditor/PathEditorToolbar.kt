@@ -14,6 +14,7 @@ import com.natpryce.editing.isNotSaved
 import com.natpryce.editing.redone
 import com.natpryce.editing.undone
 import compose.icons.LineAwesomeIcons
+import compose.icons.lineawesomeicons.Clone
 import compose.icons.lineawesomeicons.PenSolid
 import compose.icons.lineawesomeicons.PencilRulerSolid
 import compose.icons.lineawesomeicons.PlusSolid
@@ -42,6 +43,11 @@ fun FrameWindowScope.PathEditorToolbar(
             onClick = { performAction(PathEditorState::plusRandomPath) }
         ) {
             Icon(LineAwesomeIcons.PlusSolid, "Add path")
+        }
+        IconButton(
+            onClick = { performAction(PathEditorState::cloneSelection) }
+        ) {
+            Icon(LineAwesomeIcons.Clone, "Clone selected path")
         }
         IconButton(
             enabled = editState.canUndo(),

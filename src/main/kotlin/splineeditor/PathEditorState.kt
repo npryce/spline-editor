@@ -133,3 +133,11 @@ fun PathEditorState.removeControlPoint(pathIndex: Int, controlPointIndex: Int) =
         paths.set(pathIndex, paths[pathIndex].withoutControlPoint(controlPointIndex))
     }
 
+fun PathEditorState.cloneSelection() =
+    mapCurrent { paths ->
+        if (workspace.selection != null) {
+            paths.add(workspace.selection + 1, paths.get(workspace.selection))
+        } else {
+            paths
+        }
+    }.mapWorkspace { it.copy(selection = it.selection?.plus(1)) }

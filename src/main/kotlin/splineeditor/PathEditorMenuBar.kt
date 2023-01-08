@@ -26,7 +26,7 @@ fun FrameWindowScope.PathEditorMenuBar(
         Menu("File", mnemonic = 'F') {
             Item(
                 "New",
-                shortcut = KeyShortcut(Key.O, meta = true),
+                shortcut = KeyShortcut(Key.N, meta = true),
                 onClick = {
                     performAction(PathEditorState::newFile)
                 }
@@ -81,6 +81,12 @@ fun FrameWindowScope.PathEditorMenuBar(
                 "Add path",
                 shortcut = KeyShortcut(Key.A, meta = true),
                 onClick = { performAction { it.plusRandomPath() } }
+            )
+            Item(
+                "Clone path",
+                enabled = editState.workspace.selection != null,
+                shortcut = KeyShortcut(Key.D, meta = true),
+                onClick = { performAction { it.cloneSelection() } }
             )
             Item(
                 "Reverse path",
