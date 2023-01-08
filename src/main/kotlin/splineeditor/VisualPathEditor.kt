@@ -141,7 +141,7 @@ fun VisualPathEditor(
     modifier: Modifier = Modifier
 ) {
     val screenToModel = remember { mutableStateOf(Matrix()) }
-    val grabbablePaths = rememberUpdatedState(paths.grabSearchOrder(selection))
+    val grabbablePaths = rememberUpdatedState(paths.grabSearchOrder(selection, hiddenIndices))
     val snapToGridState = rememberUpdatedState(snapToGrid)
     
     // Have to define them here because the canvas content is not a @Composable function!
@@ -237,7 +237,7 @@ fun VisualPathEditor(
                                 drawPath(it.path, pathColor, strokeWidth)
                             }
                         }
-                        !in hiddenIndices -> {
+                        else -> {
                             drawPath(it.path, pathColor, strokeWidth)
                         }
                     }
@@ -325,13 +325,17 @@ private suspend fun PointerInputScope.detectEditingGestures(
     )
 }
 
-private fun Iterable<SpritePath>.grabSearchOrder(selection: Int?): PersistentList<GrabbablePath> {
-    val grabbablePaths = mapIndexed(::GrabbablePath).toPersistentList()
-    if (selection != null) {
-        return grabbablePaths.removeAt(selection).add(0, grabbablePaths[selection])
-    } else {
-        return grabbablePaths
-    }
+private fun Iterable<SpritePath>.grabSearchOrder(selection: Int?, hiddenIndices: Set<Int>): PersistentList<GrabbablePath> {
+    return mapIndexed(::GrabbablePath).toPersistentList()
+        .let { grabbablePaths ->
+            if (selection != null) {
+                grabbablePaths.removeAt(selection).add(0, grabbablePaths[selection])
+            } else {
+                grabbablePaths
+            }
+        }
+        .filter { grabbablePath -> grabbablePath.pathIndex == selection || grabbablePath.pathIndex !in hiddenIndices  }
+        .toPersistentList()
 }
 
 private fun Offset.toPoint2D(): Point2D =
@@ -351,7 +355,7 @@ private fun DrawScope.drawControlPoints(p: SpritePath, color: Color) {
         topLeft = p[0].toOffset() - Offset(2f, 2f),
         size = Size(4f, 4f),
         style = Stroke(),
-        color = Color.White
+        color = color
     )
     
     (0..p.size - 2).forEach { t ->
