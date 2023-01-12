@@ -169,9 +169,6 @@ private constructor(private val controlPoints: PersistentList<Point2D>) {
             postfix = "]",
             transform = { "(${it.x}, ${it.y})" }
         )
-    
-    fun map(m: Matrix2x2): SpritePath =
-        SpritePath(points().map { m * it })
 }
 
 
@@ -184,5 +181,6 @@ fun newSpritePath() =
         )
     )
 
+
 fun Matrix2x2.transform(path: SpritePath) =
-    SpritePath(path.points().map { transform(it) })
+    SpritePath(path.points().map { p -> this * p })
