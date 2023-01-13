@@ -21,6 +21,7 @@ import compose.icons.lineawesomeicons.PlusSolid
 import compose.icons.lineawesomeicons.RedoSolid
 import compose.icons.lineawesomeicons.Save
 import compose.icons.lineawesomeicons.UndoSolid
+import kotlinx.coroutines.withTimeoutOrNull
 import splineeditor.io.save
 
 @Composable
@@ -45,6 +46,7 @@ fun FrameWindowScope.PathEditorToolbar(
             Icon(LineAwesomeIcons.PlusSolid, "Add path")
         }
         IconButton(
+            enabled = editState.workspace.selection != null,
             onClick = { performAction(PathEditorState::cloneSelection) }
         ) {
             Icon(LineAwesomeIcons.Clone, "Clone selected path")
