@@ -54,20 +54,19 @@ private data class Grab(
 )
 
 private fun GrabbablePath.maybeGrab(
-    screenOffset: Offset,
-    modelPoint: Point2D,
+    inputOnScreen: Offset,
+    inputInModelSpace: Point2D,
     pointIndex: Int,
-    pointOffset: Double,
+    controlPointInModelSpace: Point2D,
     createNewControlPoint: Boolean
 ): Pair<Double, Grab>? {
-    val point = path.interp(pointIndex + pointOffset)
-    val distance = (point - modelPoint).distance()
+    val distance = (controlPointInModelSpace - inputInModelSpace).distance()
     return if (distance <= controlHandleSize) {
         distance to Grab(
             path = path,
             pathIndex = pathIndex,
             controlPointIndex = pointIndex,
-            screenOffset = screenOffset,
+            screenOffset = inputOnScreen,
             createNewControlPoint = createNewControlPoint
         )
     } else null
@@ -80,28 +79,45 @@ private fun PersistentList<GrabbablePath>.findGrab(
 ): Grab? =
     this
         .flatMap { gp ->
-            val grabbedControlPoints = gp.path.indices.mapNotNull { pointIndex ->
+            val grabbedControlPoints = gp.path.indices.map { pointIndex ->
                 gp.maybeGrab(
-                    screenOffset = screenOffset,
-                    modelPoint = modelPoint,
+                    inputOnScreen = screenOffset,
+                    inputInModelSpace = modelPoint,
                     pointIndex = pointIndex,
-                    pointOffset = 0.0,
+                    controlPointInModelSpace = gp.path.interp(pointIndex + 0.0),
                     createNewControlPoint = false
                 )
             }
             
-            val grabbedCreationPoints = (0 until gp.path.lastIndex).mapNotNull { pointIndex ->
+            val grabbedCreationPoints = (0 until gp.path.lastIndex).map { pointIndex ->
                 gp.maybeGrab(
-                    screenOffset = screenOffset,
-                    modelPoint = modelPoint,
+                    inputOnScreen = screenOffset,
+                    inputInModelSpace = modelPoint,
                     pointIndex = pointIndex,
-                    pointOffset = 0.5,
+                    controlPointInModelSpace = gp.path.interp(pointIndex + 0.5),
                     createNewControlPoint = true
                 )
             }
             
-            grabbedControlPoints + grabbedCreationPoints
+            val grabbedPrefixPoint = gp.maybeGrab(
+                inputOnScreen = screenOffset,
+                inputInModelSpace = modelPoint,
+                pointIndex = -1,
+                controlPointInModelSpace = gp.path.prefixControlPoint(),
+                createNewControlPoint = true
+            )
+            
+            val grabbedSuffixPoint = gp.maybeGrab(
+                inputOnScreen = screenOffset,
+                inputInModelSpace = modelPoint,
+                pointIndex = gp.path.lastIndex,
+                controlPointInModelSpace = gp.path.suffixControlPoint(),
+                createNewControlPoint = true
+            )
+            
+            grabbedControlPoints + grabbedCreationPoints + grabbedPrefixPoint + grabbedSuffixPoint
         }
+        .filterNotNull()
         .minByOrNull { it.first }
         ?.second
 
@@ -109,7 +125,14 @@ private fun PersistentList<GrabbablePath>.findGrab(
 private fun Grab.withNewControlPointApplied() =
     if (createNewControlPoint) {
         copy(
-            path = path.splitSegment(controlPointIndex),
+            path = when (controlPointIndex) {
+                -1 ->
+                    path.insertControlPoint(0, path.prefixControlPoint())
+                path.lastIndex ->
+                    path.insertControlPoint(path.size, path.suffixControlPoint())
+                else ->
+                    path.splitSegment(controlPointIndex)
+            },
             controlPointIndex = controlPointIndex + 1,
             createNewControlPoint = false
         )
@@ -188,31 +211,11 @@ fun VisualPathEditor(
             )
             
             if (snapToGrid) {
-                drawPoints(
-                    points = (-128..128 step 8).flatMap { y ->
-                        (-128..128 step 8).map { x ->
-                            Offset(x.toFloat(), y.toFloat())
-                        }
-                    },
-                    pointMode = PointMode.Points,
-                    color = gridColor,
-                    strokeWidth = 0.5f
-                )
+                drawGrid(gridColor)
             }
             
             if (drawAxes) {
-                drawLine(
-                    start = Offset(0f, -Pico8ScreenSize.height),
-                    end = Offset(0f, Pico8ScreenSize.height),
-                    color = gridColor,
-                    pathEffect = dashPathEffect(intervals = floatArrayOf(1f, 1f))
-                )
-                drawLine(
-                    start = Offset(-Pico8ScreenSize.width, 0f),
-                    end = Offset(Pico8ScreenSize.width, 0f),
-                    color = gridColor,
-                    pathEffect = dashPathEffect(intervals = floatArrayOf(1f, 1f))
-                )
+                drawAxes(gridColor)
             }
             
             drawRect(
@@ -244,6 +247,34 @@ fun VisualPathEditor(
                 }
         }
     }
+}
+
+private fun DrawScope.drawAxes(gridColor: Color) {
+    drawLine(
+        start = Offset(0f, -Pico8ScreenSize.height),
+        end = Offset(0f, Pico8ScreenSize.height),
+        color = gridColor,
+        pathEffect = dashPathEffect(intervals = floatArrayOf(1f, 1f))
+    )
+    drawLine(
+        start = Offset(-Pico8ScreenSize.width, 0f),
+        end = Offset(Pico8ScreenSize.width, 0f),
+        color = gridColor,
+        pathEffect = dashPathEffect(intervals = floatArrayOf(1f, 1f))
+    )
+}
+
+private fun DrawScope.drawGrid(gridColor: Color) {
+    drawPoints(
+        points = (-128..128 step 8).flatMap { y ->
+            (-128..128 step 8).map { x ->
+                Offset(x.toFloat(), y.toFloat())
+            }
+        },
+        pointMode = PointMode.Points,
+        color = gridColor,
+        strokeWidth = 0.5f
+    )
 }
 
 /**
@@ -325,7 +356,10 @@ private suspend fun PointerInputScope.detectEditingGestures(
     )
 }
 
-private fun Iterable<SpritePath>.grabSearchOrder(selection: Int?, hiddenIndices: Set<Int>): PersistentList<GrabbablePath> {
+private fun Iterable<SpritePath>.grabSearchOrder(
+    selection: Int?,
+    hiddenIndices: Set<Int>
+): PersistentList<GrabbablePath> {
     return mapIndexed(::GrabbablePath).toPersistentList()
         .let { grabbablePaths ->
             if (selection != null) {
@@ -334,39 +368,68 @@ private fun Iterable<SpritePath>.grabSearchOrder(selection: Int?, hiddenIndices:
                 grabbablePaths
             }
         }
-        .filter { grabbablePath -> grabbablePath.pathIndex == selection || grabbablePath.pathIndex !in hiddenIndices  }
+        .filter { grabbablePath ->
+            grabbablePath.pathIndex == selection || grabbablePath.pathIndex !in hiddenIndices
+        }
         .toPersistentList()
 }
 
 private fun Offset.toPoint2D(): Point2D =
     Point2D(x.toInt(), y.toInt())
 
-private fun DrawScope.drawControlPoints(p: SpritePath, color: Color) {
-    drawPath(p, color, 1f)
+private fun DrawScope.drawControlPoints(path: SpritePath, color: Color) {
+    drawPath(path, color, 1f)
     
     drawPoints(
-        points = p.points().map { it.toOffset() },
+        points = path.points().map { it.toOffset() },
         pointMode = PointMode.Points,
         strokeWidth = controlHandleSize,
         cap = StrokeCap.Round,
         color = color
     )
+    
     drawOval(
-        topLeft = p[0].toOffset() - Offset(2f, 2f),
+        topLeft = path[0].toOffset() - Offset(2f, 2f),
         size = Size(4f, 4f),
         style = Stroke(),
         color = color
     )
     
-    (0..p.size - 2).forEach { t ->
-        drawOval(
-            color = color,
-            topLeft = p.interp(t + 0.5).toOffset() - Offset(2f, 2f),
-            size = Size(4f, 4f),
-            style = Stroke()
-        )
+    (0..path.size - 2).forEach { p ->
+        drawExtensionPoint(path.interp(p + 0.5).toOffset(), color)
     }
+    drawExtensionPoint(path.prefixControlPoint().toOffset(), color)
+    drawExtensionPoint(path.suffixControlPoint().toOffset(), color)
 }
+
+private fun DrawScope.drawExtensionPoint(
+    offset: Offset,
+    color: Color
+) {
+    drawRect(
+        color = color,
+        topLeft = offset - Offset(2f, 2f),
+        size = Size(4f, 4f),
+        style = Stroke()
+    )
+    drawLine(
+        color = color,
+        start = offset - Offset(0f, 2f),
+        end = offset + Offset(0f, 2f)
+    )
+    drawLine(
+        color = color,
+        start = offset - Offset(2f, 0f),
+        end = offset + Offset(2f, 0f)
+    )
+}
+
+private fun SpritePath.prefixControlPoint() =
+    this[0] - (interp(0.5) - this[0])
+
+private fun SpritePath.suffixControlPoint() =
+    last + (this.last - interp(size - 1.5))
+
 
 private fun DrawScope.drawPath(
     p: SpritePath,
